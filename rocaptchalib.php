@@ -48,9 +48,11 @@ class RoCaptcha {
 	 * @param int port
 	 * @return json response
 	 */
-	private static function httpPost($host, $path, $data, $port = 80) {
+	private static function httpPost($host, $path, $data, $sessionid, $port = 80) {
 
 		$req = self::qsencode($data);
+		
+		$sessionid = urlencode($sessionid);
 
 		$opts = array(
 			'http'=>array(
@@ -58,7 +60,8 @@ class RoCaptcha {
 				'header'  => "Host: $host\r\n".
 				"Content-Type: application/x-www-form-urlencoded;\r\n".
 				"Content-Length: " . strlen($req) . "\r\n".
-				"User-Agent: RoCAPTCHA/PHP\r\n",
+				"User-Agent: RoCAPTCHA/PHP\r\n".
+				"Cookie: sessionid=" . $sessionid . "\r\n",
 				'content' => $req
 			)
 		);
@@ -81,7 +84,6 @@ class RoCaptcha {
 	 * @param string $pubkey A public key for RoCAPTCHA
 	 * @param string $error The error given by RoCAPTCHA (optional, default is null)
 	 * @param string $lang Language code (example: en, cs)
-
 	 * @return string - The HTML to be embedded in the user's form.
 	 */
 	public static function getHtml ($pubkey, $error = null, $lang = null)
@@ -105,11 +107,31 @@ class RoCaptcha {
 		</script>';
 	}
 
-
-
-
-	
-
+	/**
+	 * Gets remote IP address.
+	 * @return string - client IP address	 
+	 */	 	
+	private static function getIP() {
+		if (getenv('HTTP_CLIENT_IP')) {
+			$ip = getenv('HTTP_CLIENT_IP');
+		}
+		elseif (getenv('HTTP_X_FORWARDED_FOR')) {
+			$ip = getenv('HTTP_X_FORWARDED_FOR');
+		}
+		elseif (getenv('HTTP_X_FORWARDED')) {
+			$ip = getenv('HTTP_X_FORWARDED');
+		}
+		elseif (getenv('HTTP_FORWARDED_FOR')) {
+			$ip = getenv('HTTP_FORWARDED_FOR');
+		}
+		elseif (getenv('HTTP_FORWARDED')) {
+			$ip = getenv('HTTP_FORWARDED');
+		}
+		else {
+			$ip = $_SERVER['REMOTE_ADDR'];
+		}
+		return $ip;
+	}
 
 	/**
 	  * Calls an HTTP POST function to verify if the user's guess was correct
@@ -120,17 +142,17 @@ class RoCaptcha {
 	  * @param array $extra_params an array of extra variables to post to the server
 	  * @return RoCaptchaResponse
 	  */
-	public static function checkAnswer ($privkey, $remoteip, $challenge, $response, $extra_params = array())
+	public static function checkAnswer ($privkey, $challenge, $response, $sessionid, $extra_params = array())
 	{
 		if ($privkey == null || $privkey == '') {
 			die ("To use RoCAPTCHA you must get an API key from <a href='http://rocaptcha.com/'>http://rocaptcha.com/</a>.");
 		}
 
+		$remoteip = self::getIP();
+
 		if ($remoteip == null || $remoteip == '') {
 			die ("For security reasons, you must pass the remote ip to RoCAPTCHA");
 		}
-
-
 
 		//discard spam submissions
 		if ($challenge == null || strlen($challenge) == 0 || $response == null || strlen($response) == 0) {
@@ -146,7 +168,8 @@ class RoCaptcha {
 												 'remoteip' => $remoteip,
 												 'hash' => $challenge,
 												 'response' => $response
-												 ) + $extra_params
+												 ) + $extra_params,
+											$sessionid
 										  );
 
 		$rocaptcha_response = new RoCaptchaResponse($response);
